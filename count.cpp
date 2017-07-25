@@ -4,12 +4,12 @@
 #include <algorithm>
 #include <dirent.h>
 
-ThreadQueue myqueue;
+ThreadQueue myqueue;1
 Trie_tree mytree;
 std::mutex mymutex;
 std::vector< std::pair<int, char*> > word_list;
 std::vector< std::pair<int, char*> > temp;
-typedef std::vector<std::pair<int, char*>>::iterator vec_it;
+typedef std::vector< std::pair<int, char*> >::iterator vec_it;
 
 void move_words_to_tree() {
 	char* str;

@@ -87,7 +87,7 @@ void Trie_tree::moveRecursively(Base_ptr h, int pfd, char* old_str, char depth) 
 	if (h->count) {
 		Pair* p = new Pair(h->count, old_str);
 		write(pfd, p, 16);
-		//printf("%s: %p\n",old_str, p);
+		printf("%s: %p\n",old_str, p);
 	}
 	for (int i = 0; i < 28; ++i) {
 		if (h->children[i]) {
