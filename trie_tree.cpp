@@ -1,12 +1,10 @@
 #include "trie_tree.h"
 
-#include <string.h>
-
 unsigned Trie_tree::size() const {
 	return root->count;
 }
 
-void Trie_tree::insert(char* key) {
+void Trie_tree::insert(char* key, int num) {
 	char* p = key;
 	for (; *key ; ++key) {
 		if (*key <= 'z' && *key >= 'a' || *key <= 'Z' && *key >= 'A') break;
@@ -40,7 +38,7 @@ void Trie_tree::insert(char* key) {
 			++p;
 		}
 		if (node->count) ++root->count;
-		++node->count;
+		node->count += num;
 	}
 }
 
@@ -69,6 +67,37 @@ void Trie_tree::moveRecursively(Base_ptr h, std::vector< std::pair<int, char*> >
 			else str[depth] = '-';
 			str[depth+1] = '\0';
 			moveRecursively(h->children[i], v, str, depth + 1);
+		}
+	}
+	delete h;
+}
+
+void Trie_tree::moveToPipe(int pfd) {
+	for (int i = 0; i < 26; ++i) {
+		if (root->children[i]) {
+			char* str = new char[128];
+			str[0] = 'a' + i;
+			str[1] = '\0';
+			moveRecursively(root->children[i], pfd, str, 1);
+		}
+	}
+}
+
+void Trie_tree::moveRecursively(Base_ptr h, int pfd, char* old_str, char depth) {
+	if (h->count) {
+		Pair* p = new Pair(h->count, old_str);
+		write(pfd, p, 16);
+		//printf("%s: %p\n",old_str, p);
+	}
+	for (int i = 0; i < 28; ++i) {
+		if (h->children[i]) {
+			char* str = new char [128];
+			strcpy(str, old_str);
+			if (i < 26) str[depth] = 'a' + i;
+			else if (i == 26) str[depth] = '\'';
+			else str[depth] = '-';
+			str[depth+1] = '\0';
+			moveRecursively(h->children[i], pfd, str, depth + 1);
 		}
 	}
 	delete h;

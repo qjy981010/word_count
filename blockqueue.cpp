@@ -2,7 +2,7 @@
 
 void ThreadQueue::pop(char** elem) {
     std::unique_lock<std::mutex> lock( mutex_ );
-    cond_.wait(lock, [this]() { return !queue_.empty(); });
+    cond_.wait(lock, [this]() { return !queue_.empty(); }); // block
     *elem = queue_.front();
     queue_.pop();
 }

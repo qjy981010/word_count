@@ -2,40 +2,57 @@
 #include "blockqueue.h"
 #include <thread>
 #include <algorithm>
+#include <dirent.h>
 
 ThreadQueue myqueue;
 Trie_tree mytree;
-char breakout = '$';
 std::mutex mymutex;
 std::vector< std::pair<int, char*> > word_list;
 std::vector< std::pair<int, char*> > temp;
 typedef std::vector<std::pair<int, char*>>::iterator vec_it;
 
-void read_by_word(char* filename) {
-	if (FILE *fp = fopen(filename, "r")) {
-		char* str;
+void move_words_to_tree() {
+	char* str;
+	for (;;) {
+		myqueue.pop(&str);
+		if (*str == '$' && *(str+1) == '$') return;
+		mytree.insert(str);
+		delete str;
+	}
+}
+
+void read_by_word(char* path) { // the main thread read the file, and two child thread count
+	if (DIR* dir = opendir(path)) { // if path is a dir, read the files recursively
+		char* filename, num = strlen(path);
+		dirent* file;
+		while(file = readdir(dir)) {
+			if (file->d_name[0] == '.') continue;
+			filename = new char[256];
+			strcpy(filename, path);
+			filename[num] = '/';
+			filename[num+1] = '\0';
+			strcat(filename, file->d_name);
+		    read_by_word(filename);
+		}
+		closedir(dir);
+	}
+	else if (FILE *fp = fopen(path, "r")) { // if path is a file
+		char* str, blockover[] = "$$";
 		int i;
-		for (;;) {
+		std::thread move_words_to_tree0{move_words_to_tree};
+		std::thread move_words_to_tree1{move_words_to_tree};
+		for (; !feof(fp);) {
 			str = new char[128];
 			fscanf(fp, "%s", str);
 			myqueue.push(str);
-			if (feof(fp)) break;
 		}
-		str = &breakout;
+		str = blockover;
 		myqueue.push(str);
 		myqueue.push(str);
 		myqueue.justgo();
 		fclose(fp);
-	}
-}
-
-void move_words_to_tree() {
-	for (;;) {
-		char* str = new char[128];
-		// if (myqueue.empty() && breakout) return;
-		myqueue.pop(&str);
-		if (*str == '$') return;
-		mytree.insert(str);
+		move_words_to_tree0.join();
+		move_words_to_tree1.join();
 	}
 }
 
@@ -52,10 +69,6 @@ void mysort(vec_it begin, vec_it end) {
 }
 
 void merge(vec_it begin, vec_it mid, vec_it end, vec_it result) {
-	// for (vec_it i = begin; i < mid; ++i) std::cout << (*i).first << '\n';
-	// std::cout << "################################################################" << '\n';
-	// for (vec_it i = mid; i < end; ++i) std::cout << (*i).first << '\n';
-	// std::cout << "################################################################" << '\n';
 	vec_it beginfrommid = mid;
 	for (; begin < mid && beginfrommid < end; ++result) {
 		if (*begin > *beginfrommid) {
@@ -80,23 +93,22 @@ void merge(vec_it begin, vec_it mid, vec_it end, vec_it result) {
 }
 
 int main(int argc, char const *argv[]) {
-	char filename[] = "text.txt";
-	
-	std::thread move_words_to_tree0{move_words_to_tree};
-	std::thread move_words_to_tree1{move_words_to_tree};
+	char filename[] = "txt";
+
+	// read and count
 	read_by_word(filename);
-	
-	move_words_to_tree0.join();
-	move_words_to_tree1.join();
+
+	// move words to vector
 	word_list.reserve(mytree.size());
-	
+
 	std::thread move_words_to_vector0{move_words_to_vector, 0, 9};
 	std::thread move_words_to_vector1{move_words_to_vector, 9, 18};
 	move_words_to_vector(18, 26);
-	
+
 	move_words_to_vector0.join();
 	move_words_to_vector1.join();
-	
+
+	// divide and sort
 	int n = word_list.size(), bound[3] = {n >> 2, n >> 1, 3 * (n >> 2)};
 
 	std::thread sort0{mysort, word_list.begin(), word_list.begin() + bound[0]};
@@ -108,11 +120,7 @@ int main(int argc, char const *argv[]) {
 	sort1.join();
 	sort2.join();
 
-	// for (int i = 0; i != n; ++i) {
-	// 	printf("%s: %d\n", word_list[i].second, word_list[i].first);
-	// }
-	// printf("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n");
-
+	// merge sort
 	temp.reserve(n);
 	std::thread merge0{merge, word_list.begin(), word_list.begin()+bound[0], word_list.begin()+bound[1], temp.begin()};
 	std::thread merge1{merge, word_list.begin()+bound[1], word_list.begin()+bound[2], word_list.end(), temp.begin()+bound[1]};
@@ -122,8 +130,10 @@ int main(int argc, char const *argv[]) {
 
 	merge(temp.begin(), temp.begin()+bound[1], temp.begin()+n, word_list.begin());
 
+	// print and delete
 	for (int i = 0; i != n; ++i) {
 		printf("%s: %d\n", word_list[i].second, word_list[i].first);
+		delete word_list[i].second;
 	}
 	return 0;
 }
