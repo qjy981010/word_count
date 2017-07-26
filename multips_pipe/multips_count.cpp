@@ -1,22 +1,20 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <sys/wait.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <assert.h>
 #include <thread>
 #include <algorithm>
 
-#define CHILDTHREADNUM 3
-
 #include "trie_tree.h"
+
+#define CHILDTHREADNUM 3
 
 Trie_tree mytree;
 std::mutex mymutex;
 std::vector< std::pair<int, char*> > word_list;
 typedef std::vector<std::pair<int, char*>>::iterator vec_it;
-char blockover[] = "$$";
+char blockover[] = "$$"; // break out flag
 Pair* breakout = new Pair(0, blockover); // break out flag
 
 void move_words_to_tree(int pfd) {
@@ -25,7 +23,6 @@ void move_words_to_tree(int pfd) {
 		read(pfd, str, 128);
 		if (*str == '$' && *(str+1) == '$') break;
 		mytree.insert(str);
-		//printf("%s\n", str);
 	}
 	delete str;
 }
@@ -36,7 +33,6 @@ void merge_tree(int pfd) { // merge the result of two child
 		read(pfd, word, 132);
 		if (!word->first) break;
 		mytree.insert(word->second, word->first);
-		//printf("%s: %p\n", word->second, word);
 	}
 	delete word;
 }
@@ -56,7 +52,9 @@ void readfile(const char* path)
 			/*fork1: count*/
 			move_words_to_tree(pfds1[0]);
 			mytree.moveToPipe(pfds2[1]);
-			write(pfds2[1], breakout, 132); // tell the parent to break the dead loop
+			for (int i = 0; i < (CHILDTHREADNUM >> 1) + 1; ++i) {
+				write(pfds2[1], breakout, 132); // tell the parent to break the dead loop
+			}
 			exit(0);
 		}
 		else {
@@ -64,37 +62,38 @@ void readfile(const char* path)
 				/*fork2: count*/
 				move_words_to_tree(pfds1[0]);
 				mytree.moveToPipe(pfds2[1]);
-				write(pfds2[1], breakout, 132); // tell the parent to break the dead loop
-				write(pfds2[1], breakout, 132);
+				for (int i = 0; i < CHILDTHREADNUM - (CHILDTHREADNUM >> 1); ++i) {
+					write(pfds2[1], breakout, 132); // tell the parent to break the dead loop
+				}
 				exit(0);
 			}
 			else {
 				/*main: read and sort*/
 				size_t filesize = getFilesize(path);
-				int fd = open(path, O_RDONLY, 0), cnt = 0;
+				int fd = open(path, O_RDONLY, 0), i;
 				assert(fd != -1);
 				char* file = (char*)mmap(NULL, filesize, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0); // memory map
 				char content[filesize+1];
 				strcpy(content, file);
 				munmap(file, filesize);
-				char* word = content, *it = content; // break out flag
+				char* word = content, *it = content;
 				for (; *it != '\0'; ++it) {
 					if (*it == ' ' || *it == '\t' || *it == '\n') {
 						*(it++) = '\0';
 						write(pfds1[1], word, 128);
 						word = it;
-						++cnt;
 					}
 				}
 				write(pfds1[1], word, 128);
 				write(pfds1[1], blockover, 128); // tell the children to break the dead loop
 				write(pfds1[1], blockover, 128);
+				std::thread threads[CHILDTHREADNUM];
 
-				std::thread merge_tree0{merge_tree, pfds2[0]}; // start two to merge
-				std::thread merge_tree1{merge_tree, pfds2[0]};
+				for (i = 0; i < CHILDTHREADNUM; ++i) {
+					threads[i] = std::thread(merge_tree, pfds2[0]);
+				}
 				merge_tree(pfds2[0]);
-				merge_tree0.join();
-				merge_tree1.join();
+				for (i = 0; i < CHILDTHREADNUM; ++i) threads[i].join();
 
 				while(wait(NULL) > 0);
 			}
@@ -149,11 +148,11 @@ int main(int argc, char const *argv[])
 		return 1;
 	}
 	readfile(argv[1]);
-	std::vector< std::pair<int, char*> > temp;
-	std::thread threads[CHILDTHREADNUM];
-
+	
 	int n = mytree.size();
 	word_list.reserve(n);
+	std::thread threads[CHILDTHREADNUM];
+	std::vector< std::pair<int, char*> > temp;
 
 	// move words to vector
 	int i, gap = 26 / (CHILDTHREADNUM + 1);
@@ -177,10 +176,8 @@ int main(int argc, char const *argv[])
 	temp.reserve(n);
 	std::thread merge0{merge, word_list.begin(), word_list.begin()+bound[0], word_list.begin()+bound[1], temp.begin()};
 	std::thread merge1{merge, word_list.begin()+bound[1], word_list.begin()+bound[2], word_list.end(), temp.begin()+bound[1]};
-
 	merge0.join();
 	merge1.join();
-
 	merge(temp.begin(), temp.begin()+bound[1], temp.begin()+n, word_list.begin());
 
 	// print and delete
