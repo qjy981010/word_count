@@ -37,7 +37,7 @@ void Trie_tree::insert(char* key, int num) {
 			}
 			++p;
 		}
-		if (node->count) ++root->count;
+		if (!node->count) ++root->count;
 		node->count += num;
 	}
 }

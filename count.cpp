@@ -4,12 +4,15 @@
 #include <algorithm>
 #include <dirent.h>
 
+#define CHILDTHREADNUM 3
+
 ThreadQueue myqueue;
 Trie_tree mytree;
 std::mutex mymutex;
 std::vector< std::pair<int, char*> > word_list;
 std::vector< std::pair<int, char*> > temp;
 typedef std::vector< std::pair<int, char*> 	>::iterator vec_it;
+std::thread threads[CHILDTHREADNUM];
 
 void move_words_to_tree() {
 	char* str;
@@ -39,20 +42,23 @@ void read_by_word(const char* path) { // the main thread read the file, and two 
 	else if (FILE *fp = fopen(path, "r")) { // if path is a file
 		char* str, blockover[] = "$$";
 		int i;
-		std::thread move_words_to_tree0{move_words_to_tree};
-		std::thread move_words_to_tree1{move_words_to_tree};
-		for (; !feof(fp);) {
+		for (i = 0; i < CHILDTHREADNUM; ++i) {
+			threads[i] = std::thread{move_words_to_tree};
+		}
+		//std::thread move_words_to_tree0{move_words_to_tree};
+		//std::thread move_words_to_tree1{move_words_to_tree};
+		while (!feof(fp)) {
 			str = new char[128];
 			fscanf(fp, "%s", str); // read word by word, iostream may waste the memory, so i only included cstdio
 			myqueue.push(str);                // memory map may be faster, it's used in the mutips_count.cpp
 		}
-		str = blockover;
-		myqueue.push(str);
-		myqueue.push(str);
-		myqueue.justgo();
 		fclose(fp);
-		move_words_to_tree0.join();
-		move_words_to_tree1.join();
+		str = blockover;
+		for (i = 0; i < CHILDTHREADNUM; ++i) myqueue.push(str);
+		myqueue.justgo();
+		for (i = 0; i < CHILDTHREADNUM; ++i) threads[i].join();
+		// move_words_to_tree0.join();
+		// move_words_to_tree1.join();
 	}
 }
 
@@ -101,25 +107,23 @@ int main(int argc, char const *argv[]) {
 		return 1;
 	}
 	read_by_word(argv[1]);
+	int n = mytree.size();
+	word_list.reserve(n);
 
 	// move words to vector
-	word_list.reserve(mytree.size());
+	int i, gap = 26 / (CHILDTHREADNUM + 1);
+	for (i = 0; i < CHILDTHREADNUM; ++i) {
+		threads[i] = std::thread{move_words_to_vector, gap * i, gap * (i + 1)};
+	}
+	move_words_to_vector(gap * i, 26);
+	for (i = 0; i < CHILDTHREADNUM; ++i) threads[i].join();
 
-	std::thread move_words_to_vector0{move_words_to_vector, 0, 9};
-	std::thread move_words_to_vector1{move_words_to_vector, 9, 18};
-	move_words_to_vector(18, 26);
-
-	move_words_to_vector0.join();
-	move_words_to_vector1.join();
-
-	// divide and sort
-	int n = word_list.size(), bound[3] = {n >> 2, n >> 1, 3 * (n >> 2)};
-
+	// divide and sort, use four threads to sort
+	int bound[3] = {n >> 2, n >> 1, 3 * (n >> 2)};
 	std::thread sort0{mysort, word_list.begin(), word_list.begin() + bound[0]};
 	std::thread sort1{mysort, word_list.begin() + bound[0], word_list.begin() + bound[1]};
 	std::thread sort2{mysort, word_list.begin() + bound[1], word_list.begin() + bound[2]};
 	std::sort(word_list.begin() + bound[2], word_list.end(), comp);
-
 	sort0.join();
 	sort1.join();
 	sort2.join();
@@ -128,10 +132,8 @@ int main(int argc, char const *argv[]) {
 	temp.reserve(n);
 	std::thread merge0{merge, word_list.begin(), word_list.begin()+bound[0], word_list.begin()+bound[1], temp.begin()};
 	std::thread merge1{merge, word_list.begin()+bound[1], word_list.begin()+bound[2], word_list.end(), temp.begin()+bound[1]};
-
 	merge0.join();
 	merge1.join();
-
 	merge(temp.begin(), temp.begin()+bound[1], temp.begin()+n, word_list.begin());
 
 	// print and delete
