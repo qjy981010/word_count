@@ -16,7 +16,7 @@ void Trie_tree::insert(char* key, int num) {
 	if (!*key) return;
 	
 	{
-    	std::lock_guard<std::mutex> lock(mymutex);
+    	std::lock_guard<std::mutex> lock(mymutex); // lock
 		Base_ptr node = root;
 		while(*p) {
 			if (*p <= 'z' && *p >= 'a') {
@@ -55,7 +55,7 @@ void Trie_tree::moveToVector(std::vector< std::pair<int, char*> >& v, char begin
 
 void Trie_tree::moveRecursively(Base_ptr h, std::vector< std::pair<int, char*> >& v, char* old_str, char depth) {
 	if (h->count) {
-    	std::lock_guard<std::mutex> lock(mymutex);
+    	std::lock_guard<std::mutex> lock(mymutex); // lock
 		v.push_back(std::make_pair(h->count, old_str));
 	}
 	for (int i = 0; i < 28; ++i) {
@@ -84,11 +84,6 @@ void Trie_tree::moveToPipe(int pfd) {
 }
 
 void Trie_tree::moveRecursively(Base_ptr h, int pfd, char* old_str, char depth) {
-	if (h->count) {
-		Pair* p = new Pair(h->count, old_str);
-		write(pfd, p, 16);
-		printf("%s: %p\n",old_str, p);
-	}
 	for (int i = 0; i < 28; ++i) {
 		if (h->children[i]) {
 			char* str = new char [128];
@@ -100,5 +95,10 @@ void Trie_tree::moveRecursively(Base_ptr h, int pfd, char* old_str, char depth) 
 			moveRecursively(h->children[i], pfd, str, depth + 1);
 		}
 	}
+	if (h->count) {
+		Pair* p = new Pair(h->count, old_str);
+		write(pfd, p, 132);
+	}
+	else delete old_str;
 	delete h;
 }

@@ -10,9 +10,11 @@
 extern std::mutex mymutex;
 
 struct Pair {
-	Pair(int a, char* b):first(a), second(b){}
+	Pair(int a, char* b):first(a){
+		strcpy(second, b);
+	}
 	int first;
-	char* second;
+	char second[128];
 };
 
 class Trie_tree

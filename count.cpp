@@ -4,12 +4,12 @@
 #include <algorithm>
 #include <dirent.h>
 
-ThreadQueue myqueue;1
+ThreadQueue myqueue;
 Trie_tree mytree;
 std::mutex mymutex;
 std::vector< std::pair<int, char*> > word_list;
 std::vector< std::pair<int, char*> > temp;
-typedef std::vector< std::pair<int, char*> >::iterator vec_it;
+typedef std::vector< std::pair<int, char*> 	>::iterator vec_it;
 
 void move_words_to_tree() {
 	char* str;
@@ -21,12 +21,12 @@ void move_words_to_tree() {
 	}
 }
 
-void read_by_word(char* path) { // the main thread read the file, and two child thread count
+void read_by_word(const char* path) { // the main thread read the file, and two child thread count
 	if (DIR* dir = opendir(path)) { // if path is a dir, read the files recursively
 		char* filename, num = strlen(path);
 		dirent* file;
 		while(file = readdir(dir)) {
-			if (file->d_name[0] == '.') continue;
+			if (file->d_name[0] == '.') continue; // ignore . and ..
 			filename = new char[256];
 			strcpy(filename, path);
 			filename[num] = '/';
@@ -43,8 +43,8 @@ void read_by_word(char* path) { // the main thread read the file, and two child 
 		std::thread move_words_to_tree1{move_words_to_tree};
 		for (; !feof(fp);) {
 			str = new char[128];
-			fscanf(fp, "%s", str);
-			myqueue.push(str);
+			fscanf(fp, "%s", str); // read word by word, iostream may waste the memory, so i only included cstdio
+			myqueue.push(str);                // memory map may be faster, it's used in the mutips_count.cpp
 		}
 		str = blockover;
 		myqueue.push(str);
@@ -93,10 +93,14 @@ void merge(vec_it begin, vec_it mid, vec_it end, vec_it result) {
 }
 
 int main(int argc, char const *argv[]) {
-	char filename[] = "txt";
+	// char filename[] = "txt";
 
 	// read and count
-	read_by_word(filename);
+	if (argc == 1) {
+		printf("usage: %s <filename>\n", argv[0]);
+		return 1;
+	}
+	read_by_word(argv[1]);
 
 	// move words to vector
 	word_list.reserve(mytree.size());
