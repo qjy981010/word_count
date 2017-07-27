@@ -8,7 +8,7 @@
 
 #include "trie_tree.h"
 
-#define CHILDTHREADNUM 3
+#define CHILD_THREAD_NUM 3
 
 Trie_tree mytree;
 std::mutex mymutex;
@@ -24,7 +24,7 @@ void move_words_to_tree(int pfd) {
 		if (*str == '$' && *(str+1) == '$') break;
 		mytree.insert(str);
 	}
-	delete str;
+	delete[] str;
 }
 
 void merge_tree(int pfd) { // merge the result of two child
@@ -34,7 +34,7 @@ void merge_tree(int pfd) { // merge the result of two child
 		if (!word->first) break;
 		mytree.insert(word->second, word->first);
 	}
-	delete word;
+	delete[] word;
 }
 
 size_t getFilesize(const char* filename) {
@@ -52,7 +52,7 @@ void readfile(const char* path)
 			/*fork1: count*/
 			move_words_to_tree(pfds1[0]);
 			mytree.moveToPipe(pfds2[1]);
-			for (int i = 0; i < (CHILDTHREADNUM >> 1) + 1; ++i) {
+			for (int i = 0; i < (CHILD_THREAD_NUM >> 1) + 1; ++i) {
 				write(pfds2[1], breakout, 132); // tell the parent to break the dead loop
 			}
 			exit(0);
@@ -62,7 +62,7 @@ void readfile(const char* path)
 				/*fork2: count*/
 				move_words_to_tree(pfds1[0]);
 				mytree.moveToPipe(pfds2[1]);
-				for (int i = 0; i < CHILDTHREADNUM - (CHILDTHREADNUM >> 1); ++i) {
+				for (int i = 0; i < CHILD_THREAD_NUM - (CHILD_THREAD_NUM >> 1); ++i) {
 					write(pfds2[1], breakout, 132); // tell the parent to break the dead loop
 				}
 				exit(0);
@@ -70,30 +70,38 @@ void readfile(const char* path)
 			else {
 				/*main: read and sort*/
 				size_t filesize = getFilesize(path);
-				int fd = open(path, O_RDONLY, 0), i;
-				assert(fd != -1);
-				char* file = (char*)mmap(NULL, filesize, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0); // memory map
-				char content[filesize+1];
-				strcpy(content, file);
-				munmap(file, filesize);
-				char* word = content, *it = content;
-				for (; *it != '\0'; ++it) {
-					if (*it == ' ' || *it == '\t' || *it == '\n') {
-						*(it++) = '\0';
-						write(pfds1[1], word, 128);
-						word = it;
+				try {
+					int fd = open(path, O_RDONLY, 0);
+					char* file = (char*)mmap(NULL, filesize, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0); // memory map
+					char content[filesize+1];
+					strcpy(content, file);
+					munmap(file, filesize);
+					char* word = content, *it = content;
+					for (; *it != '\0'; ++it) {
+						if (*it == ' ' || *it == '\t' || *it == '\n') {
+							*(it++) = '\0';
+							write(pfds1[1], word, 128);
+							word = it;
+						}
 					}
+					write(pfds1[1], word, 128);
+					write(pfds1[1], blockover, 128); // tell the children to break the dead loop
+					write(pfds1[1], blockover, 128);
 				}
-				write(pfds1[1], word, 128);
-				write(pfds1[1], blockover, 128); // tell the children to break the dead loop
-				write(pfds1[1], blockover, 128);
-				std::thread threads[CHILDTHREADNUM];
+				catch(...) {
+					write(pfds1[1], blockover, 128); // tell the children to break the dead loop
+					write(pfds1[1], blockover, 128);
+					printf("ERROR: failed to read the file!\n");
+					while(wait(NULL) > 0);
+					exit(1);	
+				}
+				std::thread threads[CHILD_THREAD_NUM];
 
-				for (i = 0; i < CHILDTHREADNUM; ++i) {
+				for (int i = 0; i < CHILD_THREAD_NUM; ++i) {
 					threads[i] = std::thread(merge_tree, pfds2[0]);
 				}
 				merge_tree(pfds2[0]);
-				for (i = 0; i < CHILDTHREADNUM; ++i) threads[i].join();
+				for (int i = 0; i < CHILD_THREAD_NUM; ++i) threads[i].join();
 
 				while(wait(NULL) > 0);
 			}
@@ -116,25 +124,25 @@ void mysort(vec_it begin, vec_it end) {
 }
 
 void merge(vec_it begin, vec_it mid, vec_it end, vec_it result) {
-	vec_it beginfrommid = mid;
-	for (; begin < mid && beginfrommid < end; ++result) {
-		if (*begin > *beginfrommid) {
+	vec_it begin_from_mid = mid;
+	for (; begin < mid && begin_from_mid < end; ++result) {
+		if (*begin > *begin_from_mid) {
 			*result = *begin;
 			++begin;
 		}
 		else {
-			*result = *beginfrommid;
-			++beginfrommid;
+			*result = *begin_from_mid;
+			++begin_from_mid;
 		}
 	}
-	if (beginfrommid == end) {
+	if (begin_from_mid == end) {
 		for (; begin < mid; ++begin, ++result) {
 			*result = *begin;
 		}
 	}
 	else {
-		for (; beginfrommid < end; ++beginfrommid, ++result) {
-			*result = *beginfrommid;
+		for (; begin_from_mid < end; ++begin_from_mid, ++result) {
+			*result = *begin_from_mid;
 		}
 	}
 }
@@ -143,7 +151,7 @@ void merge(vec_it begin, vec_it mid, vec_it end, vec_it result) {
 int main(int argc, char const *argv[])
 {
 	// char filename[] = "text.txt";
-	if (argc == 1) {
+	if (argc != 2) {
 		printf("usage: %s <filename>\n", argv[0]);
 		return 1;
 	}
@@ -151,16 +159,16 @@ int main(int argc, char const *argv[])
 	
 	int n = mytree.size();
 	word_list.reserve(n);
-	std::thread threads[CHILDTHREADNUM];
+	std::thread threads[CHILD_THREAD_NUM];
 	std::vector< std::pair<int, char*> > temp;
 
 	// move words to vector
-	int i, gap = 26 / (CHILDTHREADNUM + 1);
-	for (i = 0; i < CHILDTHREADNUM; ++i) {
+	int i, gap = 26 / (CHILD_THREAD_NUM + 1);
+	for (i = 0; i < CHILD_THREAD_NUM; ++i) {
 		threads[i] = std::thread{move_words_to_vector, gap * i, gap * (i + 1)};
 	}
 	move_words_to_vector(gap * i, 26);
-	for (i = 0; i < CHILDTHREADNUM; ++i) threads[i].join();
+	for (i = 0; i < CHILD_THREAD_NUM; ++i) threads[i].join();
 
 	// divide and sort, use four threads to sort
 	int bound[3] = {n >> 2, n >> 1, 3 * (n >> 2)};
@@ -183,7 +191,7 @@ int main(int argc, char const *argv[])
 	// print and delete
 	for (int i = 0; i != n; ++i) {
 		printf("%s: %d\n", word_list[i].second, word_list[i].first);
-		delete word_list[i].second;
+		delete[] word_list[i].second;
 	}
 	return 0;
 }

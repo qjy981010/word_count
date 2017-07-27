@@ -99,6 +99,6 @@ void Trie_tree::moveRecursively(Base_ptr h, int pfd, char* old_str, char depth) 
 		Pair* p = new Pair(h->count, old_str);
 		write(pfd, p, 132);
 	}
-	else delete old_str;
+	else delete[] old_str;
 	delete h;
 }
