@@ -3,8 +3,8 @@ count : count.o trie_tree.o blockqueue.o
 count.o : count.cpp
 	g++ -c count.cpp -g
 blockqueue.o : blockqueue.h blockqueue.cpp
-	g++ -c blockqueue.h blockqueue.cpp -g
+	g++ -c blockqueue.cpp -g
 trie_tree.o : trie_tree.h trie_tree.cpp
-	g++ -c trie_tree.h trie_tree.cpp -g
+	g++ -c trie_tree.cpp -g
 clean :
-	rm *.o *.gch
+	rm *.o

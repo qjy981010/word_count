@@ -23,6 +23,7 @@ void move_words_to_tree(int pfd) {
 		read(pfd, str, 128);
 		if (*str == '$' && *(str+1) == '$') break;
 		mytree.insert(str);
+		printf("fork: %s\n", str);
 	}
 	delete[] str;
 }
@@ -81,6 +82,7 @@ void readfile(const char* path)
 						if (*it == ' ' || *it == '\t' || *it == '\n') {
 							*(it++) = '\0';
 							write(pfds1[1], word, 128);
+							printf("main: %s\n", str);
 							word = it;
 						}
 					}

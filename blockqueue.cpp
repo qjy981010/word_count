@@ -8,7 +8,6 @@ void ThreadQueue::pop(char** elem) {
 }
 
 bool ThreadQueue::empty() const {
-    std::lock_guard<std::mutex> lock(mutex_);
     return queue_.empty();
 }
 
@@ -19,7 +18,6 @@ void ThreadQueue::push( char* elem ) {
 }
 
 char* ThreadQueue::front() const {
-    std::lock_guard<std::mutex> lock( mutex_ );
     return queue_.front();
 }
 
