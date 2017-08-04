@@ -3,6 +3,6 @@ count : count_faster.o hashtable.o
 count_faster.o : count_faster.cpp
 	g++ -c count_faster.cpp -g
 hashtable.o : hashtable.h hashtable.cpp
-	g++ -c hashtable.cpp hashtable.h -g
+	g++ -c hashtable.cpp -g
 clean :
 	rm *.o
